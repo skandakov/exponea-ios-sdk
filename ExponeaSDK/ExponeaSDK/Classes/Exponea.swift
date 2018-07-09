@@ -8,7 +8,8 @@
 
 import Foundation
 
-public class Exponea: ExponeaType {
+@objc
+public class Exponea: NSObject, ExponeaType {
     /// Shared instance of ExponeaSDK.
     @objc
     public internal(set) static var shared = Exponea()
@@ -92,7 +93,7 @@ public class Exponea: ExponeaType {
     // MARK: - Init -
     
     /// The initialiser is internal, so that only the singleton can exist.
-    internal init() {}
+    internal override init() {}
     
     deinit {
         if !Exponea.isBeingTested {
