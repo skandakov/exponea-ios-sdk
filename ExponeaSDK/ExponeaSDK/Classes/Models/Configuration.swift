@@ -123,6 +123,10 @@ public struct Configuration: Decodable {
         if let automaticSessionTracking = try container.decodeIfPresent(Bool.self, forKey: .automaticSessionTracking) {
             self.automaticSessionTracking = automaticSessionTracking
         }
+        
+        if let automaticPushNotificationTracking = try container.decodeIfPresent(Bool.self, forKey: .automaticPushNotificationTracking) {
+            self.automaticPushNotificationTracking = automaticPushNotificationTracking
+        }
     }
 }
 
