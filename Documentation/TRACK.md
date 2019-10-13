@@ -12,6 +12,9 @@ You can define any event types for each of your project based on your business m
 So the possible events for tracking will be: ‘search’, ‘product view’, ‘add product to cart’, ‘checkout’, ‘purchase’. Remember that you can define any event names you wish. Our recommendation is to make them self-descriptive and human understandable.
 
 ## 🔍 Track Event
+
+> **NOTE:** Requires Token authorization.
+
 In the SDK you can track an event using the following accessor:
 
 ```
@@ -37,6 +40,8 @@ Exponea.shared.trackEvent(properties: properties,
         
 ## 🔍 Identify Customer
 
+> **NOTE:** Requires Token authorization.
+
 Save or update your customer data in the Exponea App through this method.
 
 ```
@@ -56,11 +61,27 @@ Exponea.shared.identifyCustomer(customerIds: ["registered" : "test@test.com"],
 
 ## 🔍 Track Sessions
 
+> **NOTE:** Requires Token authorization.
+
 Session is a real time spent in the game or int the app, it starts when the application is launched and ends when the game goes to background. If the user returns to game/app in 60 seconds (To change TIMEOUT value, you can set the `sessionTimeout` in the Exponea Configuration), application will continue in current session. Tracking of sessions produces two events,  `session_start` and  `session_end `.
 
 The sessions are by default tracked automatically. If you want to disable you can change it changing the `automaticSessionTracking` in the Exponea Configuration.
 
 There are also two methods available for you to track the sessions manually.
+
+## 🔍 Default Properties
+
+  It's possible to set values in the [`ExponeaConfiguration`](../Documentation/CONFIG.md) to be sent in every tracking event. Notice that those values will be overwritten if the tracking event has properties with the same key name.
+  
+💻 Usage
+
+```
+Exponea.shared.configure(projectToken: "ProjectTokenA",
+                         authorization: Authorization.token("12345abcdef"),
+                         baseURL: "YOUR BASE URL",
+                         defaultProperties: ["MyKey": "Value"])
+
+```
 
 
 ### Track Session Start

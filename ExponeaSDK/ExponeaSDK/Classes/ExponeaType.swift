@@ -19,6 +19,9 @@ public protocol ExponeaType: class {
     var configuration: Configuration? { get }
     /// Identification of the flushing mode used in to send the data to the Exponea API.
     var flushingMode: FlushingMode { get set }
+    /// The delegate that gets callbacks about notification opens and/or actions. Only has effect if automatic
+    /// push tracking is enabled, otherwise will never get called.
+    var pushNotificationsDelegate: PushNotificationManagerDelegate? { get set }
     
     // MARK: - Configure -
     
@@ -27,8 +30,11 @@ public protocol ExponeaType: class {
     /// - Parameters:
     ///   - projectToken: Project token to be used through the SDK.
     ///   - authorization: The authorization type used to authenticate with some Exponea endpoints.
-    ///   - baseURL: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
-    func configure(projectToken: String, authorization: Authorization, baseURL: String?)
+    ///   - baseUrl: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
+    ///   - appGroup: The app group used to share data among extensions, fx. for push delivered tracking.
+    ///   - defaultProperties: A list of properties to be added to all tracking events.
+    func configure(projectToken: String, authorization: Authorization, baseUrl: String?,
+                   appGroup: String?, defaultProperties: [String: JSONConvertible]?)
     
     /// Initialize the configuration with a projectMapping (token mapping) for each type of event. This allows
     /// you to track events to multiple projects, even the same event to more project at once.
@@ -37,9 +43,11 @@ public protocol ExponeaType: class {
     ///   - projectToken: Project token to be used through the SDK, as a fallback to projectMapping.
     ///   - projectMapping: The project token mapping dictionary providing all the tokens.
     ///   - authorization: The authorization type used to authenticate with some Exponea endpoints.
-    ///   - baseURL: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
+    ///   - baseUrl: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
+    ///   - appGroup: The app group used to share data among extensions, fx. for push delivered tracking.
+    ///   - defaultProperties: A list of properties to be added to all tracking events.
     func configure(projectToken: String, projectMapping: [EventType: [String]],
-                   authorization: Authorization, baseURL: String?)
+                   authorization: Authorization, baseUrl: String?, appGroup: String?, defaultProperties: [String: JSONConvertible]?)
 
     /// Initialize the configuration with a plist file containing the keys for the ExponeaSDK.
     ///
@@ -91,7 +99,8 @@ public protocol ExponeaType: class {
     /// Tracks the push notification token to Exponea API with string.
     ///
     /// - Parameter token: String containing the push notification token.
-    func trackPushToken(_ token: String)
+    ///                    If nil, it will delete existing push token.
+    func trackPushToken(_ token: String?)
 
     /// Tracks the push notification clicked event to Exponea API.
     func trackPushOpened(with userInfo: [AnyHashable: Any])
@@ -114,21 +123,6 @@ public protocol ExponeaType: class {
     func fetchRecommendation(with request: RecommendationRequest,
                              completion: @escaping (Result<RecommendationResponse>) -> Void)
     
-    /// Fetches all events for a customer.
-    ///
-    /// - Parameters:
-    ///     - request: Event from a specific customer to be retrieve.
-    ///     - completion: Object containing the data requested.
-    func fetchEvents(with request: EventsRequest, completion: @escaping (Result<EventsResponse>) -> Void)
-    
-    /// Fetches the customer attributes.
-    ///
-    /// - Parameters:
-    ///     - request: Customer attribues from a specific customer to be retrieve.
-    ///     - completion: Object containing the data requested.
-    func fetchAttributes(with request: AttributesDescription,
-                         completion: @escaping (Result<AttributesListDescription>) -> Void)
-    
     /// Fetch all available banners.
     ///
     /// - Parameters:
@@ -142,4 +136,10 @@ public protocol ExponeaType: class {
     ///   - completion: Object containing the request result.
     func fetchPersonalization(with request: PersonalizationRequest,
                               completion: @escaping (Result<PersonalizationResponse>) -> Void)
+
+    /// Fetch the list of your existing consent categories.
+    ///
+    /// - Parameter completion: A closure executed upon request completion containing the result
+    ///                         which has either the returned data or error.
+    func fetchConsents(completion: @escaping (Result<ConsentsResponse>) -> Void)
 }

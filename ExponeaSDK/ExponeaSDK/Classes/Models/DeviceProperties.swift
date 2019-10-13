@@ -9,7 +9,9 @@
 import Foundation
 
 /// Basic information about the device
-struct DeviceProperties {
+public struct DeviceProperties {
+    internal let bundle: Bundle
+    
     /// Operational system name
     public var osName: String = Constants.DeviceInfo.osName
     
@@ -20,7 +22,11 @@ struct DeviceProperties {
     public var sdk: String = Constants.DeviceInfo.sdk
     
     /// SDK Versioning
-    public var sdkVersion: String = Constants.DeviceInfo.sdkVersion
+    public var sdkVersion: String {
+        let bundle = Bundle(for: ExponeaSDK.Exponea.self)
+        let version = bundle.infoDictionary?["CFBundleShortVersionString"] as? String
+        return version ?? "Unknown version"
+    }
     
     /// Device model
     public var deviceModel: String = UIDevice.current.model
@@ -32,14 +38,15 @@ struct DeviceProperties {
     
     /// App version number, eg. "1.0".
     public var appVersion: String {
-        return Bundle.main.infoDictionary?[Constants.Keys.appVersion] as? String ?? "N/A"
+        return bundle.infoDictionary?[Constants.Keys.appVersion] as? String ?? "N/A"
     }
     
     /// Returns an array with all device properties.
-    var properties: [String: JSONValue] {
+    internal var properties: [String: JSONValue] {
         var data = [String: JSONValue]()
 
         data["os_name"] = .string(osName)
+        data["platform"] = .string(osName)
         data["os_version"] = .string(osVersion)
         data["sdk"] = .string(sdk)
         data["sdk_version"] = .string(sdkVersion)
@@ -48,5 +55,9 @@ struct DeviceProperties {
         data["app_version"] = .string(appVersion)
 
         return data
+    }
+    
+    internal init(bundle: Bundle = Bundle.main) {
+        self.bundle = bundle
     }
 }

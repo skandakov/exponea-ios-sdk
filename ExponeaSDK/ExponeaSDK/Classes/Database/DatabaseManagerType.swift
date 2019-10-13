@@ -13,14 +13,20 @@ public protocol DatabaseManagerType: class {
     var customer: Customer { get }
     
     func trackEvent(with data: [DataType]) throws
-    func trackEvent(with event: TrackEvent) throws
-    
-    func trackCustomer(with data: [DataType]) throws
-    func trackCustomer(with customer: TrackCustomer) throws
+    func identifyCustomer(with data: [DataType]) throws
     
     func fetchTrackCustomer() throws -> [TrackCustomer]
     func fetchTrackEvent() throws -> [TrackEvent]
     
     func delete(_ object: TrackCustomer) throws
     func delete(_ object: TrackEvent) throws
+    
+    /// Saves the database changes, useful when making changes to objects.
+    ///
+    /// - Throws: An error if there was an error while saving the database.
+    func save() throws
+    
+    /// Completely clears the database, including the Customer object.
+    /// Useful for completely anonymizing the user.
+    func clear() throws
 }

@@ -29,7 +29,7 @@ extension ServerRepository: TrackingRepository {
     ///     - customer: Customer identification.
     ///     - completion: Object containing the request result.
     func trackCustomer(with data: [DataType], for customerIds: [String: JSONValue],
-                       completion: @escaping ((EmptyResult) -> Void)) {
+                       completion: @escaping ((EmptyResult<RepositoryError>) -> Void)) {
         var token: String?
         var properties: [String: JSONValue] = [:]
         
@@ -47,7 +47,7 @@ extension ServerRepository: TrackingRepository {
         }
         
         // Setup router
-        let router = RequestFactory(baseURL: configuration.baseURL,
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
                                     projectToken: projectToken,
                                     route: .identifyCustomer)
         
@@ -71,7 +71,7 @@ extension ServerRepository: TrackingRepository {
     ///     - timestamp: Timestamp should always be UNIX timestamp format
     ///     - eventType: Type of event to be tracked
     func trackEvent(with data: [DataType], for customerIds: [String: JSONValue],
-                    completion: @escaping ((EmptyResult) -> Void)) {
+                    completion: @escaping ((EmptyResult<RepositoryError>) -> Void)) {
         var token: String?
         var properties: [String: JSONValue] = [:]
         var timestamp: Double?
@@ -93,7 +93,7 @@ extension ServerRepository: TrackingRepository {
         }
         
         // Setup router
-        let router = RequestFactory(baseURL: configuration.baseURL,
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
                                     projectToken: projectToken,
                                     route: .customEvent)
         
@@ -119,7 +119,7 @@ extension ServerRepository: RepositoryType {
     ///   - completion: Object containing the request result.
     func fetchRecommendation(recommendation: RecommendationRequest, for customerIds: [String: JSONValue],
                              completion: @escaping (Result<RecommendationResponse>) -> Void) {
-        let router = RequestFactory(baseURL: configuration.baseURL,
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
                                     projectToken: configuration.fetchingToken,
                                     route: .customerRecommendation)
         let parameters = CustomerParameters(customer: customerIds, recommendation: recommendation)
@@ -137,8 +137,8 @@ extension ServerRepository: RepositoryType {
     ///   - customerIds: Identification of a customer.
     func fetchAttributes(attributes: [AttributesDescription],
                          for customerIds: [String: JSONValue],
-                         completion: @escaping (Result<AttributesListDescription>) -> Void) {
-        let router = RequestFactory(baseURL: configuration.baseURL,
+                         completion: @escaping (Result<AttributesResponse>) -> Void) {
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
                                     projectToken: configuration.fetchingToken,
                                     route: .customerAttributes)
         let parameters = CustomerParameters(customer: customerIds, attributes: attributes)
@@ -159,7 +159,7 @@ extension ServerRepository: RepositoryType {
     func fetchEvents(events: EventsRequest,
                      for customerIds: [String: JSONValue],
                      completion: @escaping (Result<EventsResponse>) -> Void) {
-        let router = RequestFactory(baseURL: configuration.baseURL,
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
                                     projectToken: configuration.fetchingToken,
                                     route: .customerEvents)
         let parameters = CustomerParameters(customer: customerIds, events: events)
@@ -175,7 +175,7 @@ extension ServerRepository: RepositoryType {
     /// - Parameters:
     ///   - completion: Object containing the request result.
     func fetchBanners(completion: @escaping (Result<BannerResponse>) -> Void) {
-        let router = RequestFactory(baseURL: configuration.baseURL,
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
                                     projectToken: configuration.fetchingToken,
                                     route: .banners)
         let request = router.prepareRequest(authorization: configuration.authorization)
@@ -193,7 +193,7 @@ extension ServerRepository: RepositoryType {
     func fetchPersonalization(with request: PersonalizationRequest,
                               for customerIds: [String : JSONValue],
                               completion: @escaping (Result<PersonalizationResponse>) -> Void) {
-        let router = RequestFactory(baseURL: configuration.baseURL,
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
                                     projectToken: configuration.fetchingToken,
                                     route: .personalization)
         let request = router.prepareRequest(authorization: configuration.authorization,
@@ -202,5 +202,31 @@ extension ServerRepository: RepositoryType {
         session
             .dataTask(with: request, completionHandler: router.handler(with: completion))
             .resume()
+    }
+
+    /// Fetch the list of your existing consent categories.
+    ///
+    /// - Parameter completion: A closure executed upon request completion containing the result
+    ///                         which has either the returned data or error.
+    func fetchConsents(completion: @escaping (Result<ConsentsResponse>) -> Void) {
+        let router = RequestFactory(baseUrl: configuration.baseUrl,
+                                    projectToken: configuration.fetchingToken,
+                                    route: .consents)
+        let request = router.prepareRequest(authorization: configuration.authorization)
+        session
+            .dataTask(with: request, completionHandler: router.handler(with: completion))
+            .resume()
+    }
+}
+
+extension ServerRepository {
+    
+    // Gets and cancels all tasks
+    func cancelRequests() {
+        session.getAllTasks { (tasks) in
+            for task in tasks {
+                task.cancel()
+            }
+        }
     }
 }

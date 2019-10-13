@@ -58,10 +58,10 @@ public class Exponea: ExponeaType {
     
     /// Custom user defaults to track basic information
     internal var userDefaults: UserDefaults = {
-        if UserDefaults(suiteName: "ExponeaSDK") == nil {
-            UserDefaults.standard.addSuite(named: "ExponeaSDK")
+        if UserDefaults(suiteName: Constants.General.userDefaultsSuite) == nil {
+            UserDefaults.standard.addSuite(named: Constants.General.userDefaultsSuite)
         }
-        return UserDefaults(suiteName: "ExponeaSDK")!
+        return UserDefaults(suiteName: Constants.General.userDefaultsSuite)!
     }()
     
     /// Sets the flushing mode for usage
@@ -84,14 +84,28 @@ public class Exponea: ExponeaType {
         }
     }
     
+    /// The delegate that gets callbacks about notification opens and/or actions. Only has effect if automatic
+    /// push tracking is enabled, otherwise will never get called.
+    public var pushNotificationsDelegate: PushNotificationManagerDelegate? {
+        get {
+            return trackingManager?.notificationsManager?.delegate
+        }
+        set {
+            trackingManager?.notificationsManager?.delegate = newValue
+        }
+    }
+    
     internal static let isBeingTested: Bool = {
         return ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }()
     
     // MARK: - Init -
     
-    /// The initialiser is internal, so that only the singleton can exist.
-    internal init() {}
+    /// The initialiser is internal, so that only the singleton can exist when used in production.
+    internal init() {
+        let version = Bundle(for: Exponea.self).infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        Exponea.logger.logMessage("⚙️ Starting ExponeaSDK, version \(version).")
+    }
     
     deinit {
         if !Exponea.isBeingTested {
@@ -100,15 +114,26 @@ public class Exponea: ExponeaType {
     }
     
     internal func sharedInitializer(configuration: Configuration) {
-        Exponea.logger.log(.verbose, message: "Intialising Exponea with provided configuration.")
-        
-        // Recreate repository
-        let repository = ServerRepository(configuration: configuration)
-        self.repository = repository
-        
-        // Setup tracking manager
-        self.trackingManager = TrackingManager(repository: repository,
-                                               userDefaults: userDefaults)
+        Exponea.logger.log(.verbose, message: "Configuring Exponea with provided configuration:\n\(configuration)")
+
+        do {
+            // Create database
+            let database = try DatabaseManager()
+
+            // Recreate repository
+            let repository = ServerRepository(configuration: configuration)
+            self.repository = repository
+
+            // Finally, configuring tracking manager
+            self.trackingManager = TrackingManager(repository: repository,
+                                                   database: database,
+                                                   userDefaults: userDefaults)
+        } catch {
+            // Failing gracefully, if setup failed
+            Exponea.logger.log(.error, message: """
+                Error while creating a database, Exponea cannot be configured.\n\(error.localizedDescription)
+                """)
+        }
     }
 }
 
@@ -117,17 +142,17 @@ public class Exponea: ExponeaType {
 internal extension Exponea {
     
     /// Alias for dependencies required across various internal and public functions of Exponea.
-    internal typealias Dependencies = (
+    typealias Dependencies = (
         configuration: Configuration,
         repository: RepositoryType,
         trackingManager: TrackingManagerType
     )
     
-    /// <#Description#>
+    /// Gets the Exponea dependencies. If Exponea wasn't configured it will throw an error instead.
     ///
-    /// - Returns: <#return value description#>
-    /// - Throws: <#throws value description#>
-    internal func getDependenciesIfConfigured() throws -> Dependencies {
+    /// - Returns: The dependencies required to perform any actions.
+    /// - Throws: A not configured error in case Exponea wasn't configured beforehand.
+    func getDependenciesIfConfigured() throws -> Dependencies {
         guard let configuration = configuration,
             let repository = repository,
             let trackingManager = trackingManager else {
@@ -148,12 +173,18 @@ public extension Exponea {
     /// - Parameters:
     ///   - projectToken: Project token to be used through the SDK.
     ///   - authorization: The authorization type used to authenticate with some Exponea endpoints.
-    ///   - baseURL: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
-    public func configure(projectToken: String, authorization: Authorization, baseURL: String? = nil) {
+    ///   - baseUrl: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
+    func configure(projectToken: String,
+                   authorization: Authorization,
+                   baseUrl: String? = nil,
+                   appGroup: String? = nil,
+                   defaultProperties: [String: JSONConvertible]? = nil) {
         do {
             let configuration = try Configuration(projectToken: projectToken,
                                                   authorization: authorization,
-                                                  baseURL: baseURL)
+                                                  baseUrl: baseUrl,
+                                                  appGroup: appGroup,
+                                                  defaultProperties: defaultProperties)
             self.configuration = configuration
         } catch {
             Exponea.logger.log(.error, message: "Can't create configuration: \(error.localizedDescription)")
@@ -168,7 +199,7 @@ public extension Exponea {
     /// Mandatory keys:
     ///  - projectToken: Project token to be used through the SDK, as a fallback to projectMapping.
     ///  - authorization: The authorization type used to authenticate with some Exponea endpoints.
-    public func configure(plistName: String) {
+    func configure(plistName: String) {
         do {
             let configuration = try Configuration(plistName: plistName)
             self.configuration = configuration
@@ -186,16 +217,20 @@ public extension Exponea {
     ///   - projectToken: Project token to be used through the SDK, as a fallback to projectMapping.
     ///   - projectMapping: The project token mapping dictionary providing all the tokens.
     ///   - authorization: The authorization type used to authenticate with some Exponea endpoints.
-    ///   - baseURL: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
-    public func configure(projectToken: String,
-                          projectMapping: [EventType: [String]],
-                          authorization: Authorization,
-                          baseURL: String? = nil) {
+    ///   - baseUrl: Base URL used for the project, for example if you use a custom domain with your Exponea setup.
+    func configure(projectToken: String,
+                   projectMapping: [EventType: [String]],
+                   authorization: Authorization,
+                   baseUrl: String? = nil,
+                   appGroup: String? = nil,
+                   defaultProperties: [String: JSONConvertible]? = nil) {
         do {
             let configuration = try Configuration(projectToken: projectToken,
                                                   projectMapping: projectMapping,
                                                   authorization: authorization,
-                                                  baseURL: baseURL)
+                                                  baseUrl: baseUrl,
+                                                  appGroup: appGroup,
+                                                  defaultProperties: defaultProperties)
             self.configuration = configuration
         } catch {
             Exponea.logger.log(.error, message: "Can't create configuration: \(error.localizedDescription)")

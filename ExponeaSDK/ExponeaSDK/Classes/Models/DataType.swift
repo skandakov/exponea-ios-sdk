@@ -32,11 +32,7 @@ public enum DataType {
 
     /// For some tracked events you can also provide an event type
     case eventType(String)
-    case property(String)
-    case id(String)
-    case recommendation(RecommendationRequest)
-    case attributes(AttributesDescription)
-    case events(EventsRequest)
-    case pushNotificationToken(String)
-    case pushNotificationPayload([AnyHashable: Any])
+
+    /// If nil, it will delete the existing push notification token if any.
+    case pushNotificationToken(String?)
 }

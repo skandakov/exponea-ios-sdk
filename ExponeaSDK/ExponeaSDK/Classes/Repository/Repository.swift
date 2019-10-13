@@ -18,7 +18,7 @@ protocol TrackingRepository {
     ///     - completion: Object containing the request result.
     func trackCustomer(with data: [DataType],
                        for customerIds: [String: JSONValue],
-                       completion: @escaping ((EmptyResult) -> Void))
+                       completion: @escaping ((EmptyResult<RepositoryError>) -> Void))
 
     /// Tracks new events for a customer.
     ///
@@ -28,7 +28,7 @@ protocol TrackingRepository {
     ///     - completion: Object containing the request result.
     func trackEvent(with data: [DataType],
                     for customerIds: [String: JSONValue],
-                    completion: @escaping ((EmptyResult) -> Void))
+                    completion: @escaping ((EmptyResult<RepositoryError>) -> Void))
 }
 
 protocol FetchRepository {
@@ -47,7 +47,7 @@ protocol FetchRepository {
     ///   - customerIds: Identification of a customer.
     ///   - attributes: List of attributes you want to retrieve.
     func fetchAttributes(attributes: [AttributesDescription], for customerIds: [String: JSONValue],
-                         completion: @escaping (Result<AttributesListDescription>) -> Void)
+                         completion: @escaping (Result<AttributesResponse>) -> Void)
 
     /// Fetch customer events by its type.
     ///
@@ -70,11 +70,19 @@ protocol FetchRepository {
     ///   - request: Personalization request containing all the information about the request banners.
     ///   - customerIds: Identification of a customer.
     ///   - completion: Object containing the request result.
-    func fetchPersonalization(with request: PersonalizationRequest,
-                              for customerIds: [String: JSONValue],
+    func fetchPersonalization(with request: PersonalizationRequest, for customerIds: [String: JSONValue],
                               completion: @escaping (Result<PersonalizationResponse>) -> Void)
+
+    /// Fetch the list of your existing consent categories.
+    ///
+    /// - Parameter completion: A closure executed upon request completion containing the result
+    ///                         which has either the returned data or error.
+    func fetchConsents(completion: @escaping (Result<ConsentsResponse>) -> Void)
 }
 
 protocol RepositoryType: class, TrackingRepository, FetchRepository {
     var configuration: Configuration { get set }
+    
+    /// Cancels all requests that are currently underway.
+    func cancelRequests()
 }

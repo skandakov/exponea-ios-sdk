@@ -9,16 +9,31 @@
 import Foundation
 import CoreData
 
-/// <#Description#>
+/// A configuration object used to configure Exponea when initialising.
 public struct Configuration: Decodable {
     public internal(set) var projectMapping: [EventType: [String]]?
     public internal(set) var projectToken: String?
     public internal(set) var authorization: Authorization = .none
-    public internal(set) var baseURL: String = Constants.Repository.baseURL
+    public internal(set) var baseUrl: String = Constants.Repository.baseUrl
     public internal(set) var contentType: String = Constants.Repository.contentType
+    public internal(set) var defaultProperties: [String: JSONConvertible]?
     public var sessionTimeout: Double = Constants.Session.defaultTimeout
     public var automaticSessionTracking: Bool = true
+
+    /// If enabled, will swizzle default push notifications methods and functions and automatically
+    /// listen to updates for tokens or push settings.
     public var automaticPushNotificationTracking: Bool = true
+
+    /// If automatic push notification tracking is enabled, this can be used to determine how often
+    /// should the push notification token be sent to Exponea.
+    public var tokenTrackFrequency: TokenTrackFrequency = .onTokenChange
+
+    /// App group is used when push notification data is shared among service or content extensions.
+    /// This is required for tracking delivered push notifications properly.
+    public var appGroup: String? = nil
+    
+    /// The maximum amount of retries before a flush event is considered as invalid and deleted from the database.
+    public var flushEventMaxRetries: Int = Constants.Session.maxRetries
 
     enum CodingKeys: String, CodingKey {
         case projectMapping
@@ -26,23 +41,30 @@ public struct Configuration: Decodable {
         case sessionTimeout
         case automaticSessionTracking
         case automaticPushNotificationTracking
+        case tokenTrackFrequency
         case authorization
         case baseUrl
+        case flushEventMaxRetries
+        case appGroup
+        case defaultProperties
     }
 
     private init() {}
 
-    /// <#Description#>
+    /// Creates the configuration object with the provided properties.
     ///
     /// - Parameters:
-    ///   - projectToken: <#projectToken description#>
-    ///   - projectMapping: <#projectMapping description#>
-    ///   - authorization: <#authorization description#>
-    ///   - baseURL: <#baseURL description#>
+    ///   - projectToken: The project token used for connecting with Exponea.
+    ///   - projectMapping: Optional project token mapping if you wish to send events to different projects.
+    ///   - authorization: The authorization you want to use when tracking events.
+    ///   - baseUrl: Your API base URL that the SDK will connect to.
+    ///   - defaultProperties: Custom properties to be tracked in every event.
     public init(projectToken: String?,
                 projectMapping: [EventType: [String]]? = nil,
                 authorization: Authorization,
-                baseURL: String?) throws {
+                baseUrl: String?,
+                appGroup: String? = nil,
+                defaultProperties: [String: JSONConvertible]? = nil) throws {
         guard let projectToken = projectToken else {
             throw ExponeaError.configurationError("No project token provided.")
         }
@@ -50,14 +72,17 @@ public struct Configuration: Decodable {
         self.projectToken = projectToken
         self.projectMapping = projectMapping
         self.authorization = authorization
-        if let url = baseURL {
-            self.baseURL = url
+        self.appGroup = appGroup
+        self.defaultProperties = defaultProperties
+
+        if let url = baseUrl {
+            self.baseUrl = url
         }
     }
 
-    /// <#Description#>
+    /// Creates the Configuration object from a plist file.
     ///
-    /// - Parameter plistName: <#plistName description#>
+    /// - Parameter plistName: The name of the plist file you want to load configuration from.
     public init(plistName: String) throws {
         for bundle in Bundle.allBundles {
             let fileName = plistName.replacingOccurrences(of: ".plist", with: "")
@@ -82,32 +107,34 @@ public struct Configuration: Decodable {
 
     // MARK: - Decodable -
 
-    /// <#Description#>
-    ///
-    /// - Parameter decoder: <#decoder description#>
-    /// - Throws: <#throws value description#>
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
+        // Project token
         if let projectToken = try container.decodeIfPresent(String.self, forKey: .projectToken) {
             self.projectToken = projectToken
         }
 
+        // Base URL
         if let baseUrl = try container.decodeIfPresent(String.self, forKey: .baseUrl) {
-            self.baseURL = baseUrl
+            self.baseUrl = baseUrl
         }
 
+        // Authorization
         if let authorization = try container.decodeIfPresent(String.self, forKey: .authorization) {
             let components = authorization.split(separator: " ")
             
-            if components.count == 2, components.first == "Token" {
-                self.authorization = .token(String(components[1]))
-            } else if components.count == 2, components.first == "Basic" {
-                self.authorization = .basic(String(components[1]))
+            if components.count == 2 {
+                switch components.first {
+                case "Token": self.authorization = .token(String(components[1]))
+                default: break
+                }
             }
         }
 
-        if let dictionary = try container.decodeIfPresent(Dictionary<String, [String]>.self, forKey: .projectMapping) {
+        // Project token mapping
+        if let dictionary = try container.decodeIfPresent(
+            Dictionary<String, [String]>.self, forKey: .projectMapping) {
             var mapping: [EventType: [String]] = [:]
             for (_, element: (key: event, value: tokenArray)) in dictionary.enumerated() {
                 guard let eventType = EventType(rawValue: event) else { continue }
@@ -116,12 +143,49 @@ public struct Configuration: Decodable {
             self.projectMapping = mapping
         }
 
+        // Session timeout
         if let sessionTimeout = try container.decodeIfPresent(Double.self, forKey: .sessionTimeout) {
             self.sessionTimeout = sessionTimeout
         }
 
-        if let automaticSessionTracking = try container.decodeIfPresent(Bool.self, forKey: .automaticSessionTracking) {
+        // Automatic sessiont racking
+        if let automaticSessionTracking = try container.decodeIfPresent(
+            Bool.self, forKey: .automaticSessionTracking) {
             self.automaticSessionTracking = automaticSessionTracking
+        }
+
+        // Automatic push notifications
+        if let automaticPushNotificationTracking = try container.decodeIfPresent(
+            Bool.self, forKey: .automaticPushNotificationTracking) {
+            self.automaticPushNotificationTracking = automaticPushNotificationTracking
+        }
+
+        // Token track frequency
+        if let tokenTrackFrequency = try container.decodeIfPresent(
+            TokenTrackFrequency.self, forKey: .tokenTrackFrequency) {
+            self.tokenTrackFrequency = tokenTrackFrequency
+        }
+
+        // Flush event max retries
+        if let flushEventMaxRetries = try container.decodeIfPresent(
+            Int.self, forKey: .flushEventMaxRetries) {
+            self.flushEventMaxRetries = flushEventMaxRetries
+        }
+
+        // App group
+        if let appGroup = try container.decodeIfPresent(String.self, forKey: .appGroup) {
+            self.appGroup = appGroup
+        }
+
+        // Default properties
+        if let defaultDictionary = try container.decodeIfPresent(
+            [String: JSONValue].self, forKey: .defaultProperties) {
+            var properties: [String: JSONConvertible] = [:]
+            defaultDictionary.forEach({ property in
+                properties[property.key] = property.value.jsonConvertible
+            })
+            guard !properties.isEmpty else { return }
+            self.defaultProperties = properties
         }
     }
 }
@@ -165,6 +229,8 @@ extension Configuration {
         }
     }
     
+    /// Returns a single token suitable for fetching customer data.
+    /// By default uses same token as for the `ActionType` value `.identifyCustomer`.
     var fetchingToken: String {
         guard let projectToken = projectToken else {
             Exponea.logger.log(.warning, message: """
@@ -175,5 +241,48 @@ extension Configuration {
         }
         
         return projectToken
+    }
+}
+
+extension Configuration: CustomStringConvertible {
+    public var description: String {
+        var text = "[Configuration]\n"
+        
+        if let mapping = projectMapping {
+            text += "Project Token Mapping: \(mapping)\n"
+        }
+        
+        if let token = projectToken {
+            text += "Project Token: \(token)\n"
+        }
+
+        if let defaultProperties = defaultProperties {
+            text += "Default Attributes: \(defaultProperties)\n"
+        }
+        
+        text += """
+        Authorization: \(authorization)
+        Base URL: \(baseUrl)
+        Content Type: \(contentType)
+        Session Timeout: \(sessionTimeout)
+        Automatic Session Tracking: \(automaticSessionTracking)
+        Automatic Push Notification Tracking: \(automaticPushNotificationTracking)
+        Token Track Frequency: \(tokenTrackFrequency)
+        Flush Event Max Retries: \(flushEventMaxRetries)
+        App Group: \(appGroup ?? "not configured")
+        """
+        
+        return text
+    }
+    
+    /// Returns the hostname based on the baseUrl value.
+    public var hostname: String {
+        guard let components = URLComponents(string: baseUrl),
+            let host = components.host else {
+            Exponea.logger.log(.warning, message: "Can't get URL components from baseUrl, check your baseUrl.")
+            return baseUrl
+        }
+        
+        return host
     }
 }

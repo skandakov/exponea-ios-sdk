@@ -16,7 +16,7 @@ Pod::Spec.new do |s|
   #
 
   s.name         = "ExponeaSDK"
-  s.version      = "0.9.3"
+  s.version      = "2.2.3"
   s.summary      = "Exponea SDK used to track and fetch data from Exponea Experience Cloud."
 
   # This description is used to generate tags and improve search results.
@@ -25,7 +25,7 @@ Pod::Spec.new do |s|
   #   * Write the description between the DESC delimiters below.
   #   * Finally, don't worry about the indent, CocoaPods strips it!
   s.description  = <<-DESC
-  This library allows you to interact from your application or game with the Exponea App. 
+  This library allows you to interact from your application or game with the Exponea App.
   Exponea empowers B2C marketers to raise conversion rates, improve acquisition ROI, and maximize customer lifetime value.
                    DESC
 
@@ -59,7 +59,7 @@ Pod::Spec.new do |s|
   #
 
   s.platform     = :ios, "10.0"
-  s.swift_version = '4.1.2'
+  s.swift_version = '4.2.0'
 
   # ――― Source Location ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――― #
   #
@@ -69,7 +69,6 @@ Pod::Spec.new do |s|
 
   s.source       = { :git => "https://github.com/exponea/exponea-ios-sdk.git", :tag => "#{s.version}" }
 
-
   # ――― Source Code ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――― #
   #
   #  CocoaPods is smart about how it includes source code. For source files
@@ -78,16 +77,8 @@ Pod::Spec.new do |s|
   #  Not including the public_header_files will make all headers public.
   #
 
-  s.source_files  = "ExponeaSDK/ExponeaSDK/Classes/**/*.swift"  
-
-  # ――― Resources ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――― #
-  #
-  #  A list of resources included with the Pod. These are copied into the
-  #  target bundle with a build phase script. Anything else will be cleaned.
-  #  You can preserve files from being cleaned, please don't preserve
-  #  non-essential files like tests, examples and documentation.
-  #
-  
-  s.resources = ['ExponeaSDK/ExponeaSDK/Classes/Database/*.xcdatamodeld']
+  s.source_files  = ["ExponeaSDK/ExponeaSDK/**/*.swift", "ExponeaSDK/ExponeaSDK-Shared/**/*.swift"]
+  s.exclude_files = "ExponeaSDK/ExponeaSDK-Notifications/**/*"
+  s.resources = ["ExponeaSDK/ExponeaSDK/Classes/Database/*.xcdatamodeld"]
 
 end

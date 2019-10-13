@@ -10,6 +10,15 @@ import Foundation
 
 extension Exponea {
     
+    internal func executeWithDependencies(_ closure: (Exponea.Dependencies) throws -> Void) {
+        do {
+            let dependencies = try getDependenciesIfConfigured()
+            try closure(dependencies)
+        } catch {
+            Exponea.logger.log(.error, message: error.localizedDescription)
+        }
+    }
+    
     /// Adds new events to a customer. All events will be stored into coredata
     /// until it will be flushed (send to api).
     ///
@@ -18,21 +27,26 @@ extension Exponea {
     ///     - timestamp: Unix timestamp when the event was created.
     ///     - eventType: Name of event
     public func trackEvent(properties: [String: JSONConvertible], timestamp: Double?, eventType: String?) {
-        // Create initial data
-        var data: [DataType] = [.properties(properties.mapValues({ $0.jsonValue })),
-                                .timestamp(timestamp)]
-        
-        // If event type was provided, use it
-        if let eventType = eventType {
-            data.append(.eventType(eventType))
-        }
-        
-        do {
-            // Get dependencies and do the actual tracking
-            let dependencies = try getDependenciesIfConfigured()
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+
+            // Retrieve the default properties to add on track events and combine with the received ones.
+            let defaultProperties = dependencies.configuration.defaultProperties ?? [:]
+            let allProperties = defaultProperties.merging(properties, uniquingKeysWith: { (_, new) in new })
+
+            // Create initial data
+            var data: [DataType] = [.properties(allProperties.mapValues({ $0.jsonValue })),
+                                    .timestamp(timestamp)]
+            
+            // If event type was provided, use it
+            if let eventType = eventType {
+                data.append(.eventType(eventType))
+            }
+            
+            // Do the actual tracking
             try dependencies.trackingManager.track(.customEvent, with: data)
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
         }
     }
     
@@ -42,16 +56,21 @@ extension Exponea {
     ///     - properties: Object with event values.
     ///     - timestamp: Unix timestamp when the event was created.
     public func trackPayment(properties: [String : JSONConvertible], timestamp: Double?) {
-        // Create initial data
-        let data: [DataType] = [.properties(properties.mapValues({ $0.jsonValue })),
-                                .timestamp(timestamp)]
-        
-        do {
-            // Get dependencies and do the actual tracking
-            let dependencies = try getDependenciesIfConfigured()
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+
+            // Retrieve the default properties to add on track events and combine with the received ones.
+            let defaultProperties = dependencies.configuration.defaultProperties ?? [:]
+            let allProperties = defaultProperties.merging(properties, uniquingKeysWith: { (_, new) in new })
+            
+            // Create initial data
+            let data: [DataType] = [.properties(allProperties.mapValues({ $0.jsonValue })),
+                                    .timestamp(timestamp)]
+            
+            // Do the actual tracking
             try dependencies.trackingManager.track(.payment, with: data)
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
         }
     }
     
@@ -65,11 +84,17 @@ extension Exponea {
     public func identifyCustomer(customerIds: [String: JSONConvertible]?,
                                  properties: [String: JSONConvertible],
                                  timestamp: Double?) {
-        do {
-            let dependencies = try getDependenciesIfConfigured()
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+
+            // Retrieve the default properties to add on track events and combine with the received ones.
+            let defaultProperties = dependencies.configuration.defaultProperties ?? [:]
+            let allProperties = defaultProperties.merging(properties, uniquingKeysWith: { (_, new) in new })
             
             // Prepare data
-            var data: [DataType] = [.properties(properties.mapValues({ $0.jsonValue })),
+            var data: [DataType] = [.properties(allProperties.mapValues({ $0.jsonValue })),
                                     .timestamp(timestamp)]
             if var ids = customerIds {
                 // Check for overriding cookie
@@ -84,8 +109,6 @@ extension Exponea {
             }
             
             try dependencies.trackingManager.track(.identifyCustomer, with: data)
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
         }
     }
     
@@ -102,53 +125,66 @@ extension Exponea {
     /// Tracks the push notification token to Exponea API with string.
     ///
     /// - Parameter token: String containing the push notification token.
-    public func trackPushToken(_ token: String) {
-        let data: [DataType] = [.pushNotificationToken(token)]
-        
-        do {
-            // Get dependencies and do the actual tracking
-            let dependencies = try getDependenciesIfConfigured()
+    public func trackPushToken(_ token: String?) {
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+            let data: [DataType] = [.pushNotificationToken(token)]
+            
+            // Do the actual tracking
             try dependencies.trackingManager.track(.identifyCustomer, with: data)
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
         }
     }
     
     /// Tracks the push notification clicked event to Exponea API.
     public func trackPushOpened(with userInfo: [AnyHashable: Any]) {
-        let data: [DataType] = [.timestamp(nil), .pushNotificationPayload(userInfo)]
-        
-        do {
-            // Get dependencies and do the actual tracking
-            let dependencies = try getDependenciesIfConfigured()
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+            
+            guard let payload = userInfo as? [String: Any] else {
+                Exponea.logger.log(.error, message: "Push notification payload contained non-string keys.")
+                return
+            }
+
+            // Retrieve the default properties to add on track events and combine with the received ones.
+            let defaultProperties = dependencies.configuration.defaultProperties?.mapValues { $0.jsonValue } ?? [:]
+
+            var properties = JSONValue.convert(payload)
+            if properties.index(forKey: "action_type") == nil {
+                properties["action_type"] = .string("mobile notification")
+            }
+            properties["status"] = .string("clicked")
+
+            let allProperties = defaultProperties.merging(properties, uniquingKeysWith: { (_, new) in new })
+            
+            let data: [DataType] = [.timestamp(nil),
+                                    .properties(allProperties)]
+            // Do the actual tracking
             try dependencies.trackingManager.track(.pushOpened, with: data)
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
         }
-        
     }
     
     // MARK: Sessions
     
-    /// Restart any tasks that were paused (or not yet started) while the application was inactive.
-    /// If the application was previously in the background, optionally refresh the user interface.
     public func trackSessionStart() {
-        do {
-            let dependencies = try getDependenciesIfConfigured()
-            try dependencies.trackingManager.track(.sessionStart, with: nil)
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+            try dependencies.trackingManager.triggerSessionStart()
         }
     }
     
-    /// Restart any tasks that were paused (or not yet started) while the application was inactive.
-    /// If the application was previously in the background, optionally refresh the user interface.
+    /// Tracks a
     public func trackSessionEnd() {
-        do {
-            let dependencies = try getDependenciesIfConfigured()
-            try dependencies.trackingManager.track(.sessionEnd, with: nil)
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+            try dependencies.trackingManager.triggerSessionEnd()
         }
     }
     
@@ -156,11 +192,25 @@ extension Exponea {
     
     /// This method can be used to manually flush all available data to Exponea.
     public func flushData() {
-        do {
-            let dependencies = try getDependenciesIfConfigured()
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
             dependencies.trackingManager.flushData()
-        } catch {
-            Exponea.logger.log(.error, message: error.localizedDescription)
+        }
+    }
+    
+    // MARK: Anonymize
+    
+    /// Anonymizes the user and re-creates the database.
+    /// All customer identification (inclduing cookie) will be permanently deleted.
+    public func anonymize() {
+        executeWithDependencies { dependencies in
+            guard dependencies.configuration.authorization != Authorization.none else {
+                throw ExponeaError.authorizationInsufficient("token, basic")
+            }
+            
+            try dependencies.trackingManager.anonymize()
         }
     }
 }

@@ -9,6 +9,7 @@
 import Foundation
 import CoreData
 
+@objc(Customer)
 public class Customer: NSManagedObject {
     
     @nonobjc public class func fetchRequest() -> NSFetchRequest<Customer> {
@@ -16,28 +17,62 @@ public class Customer: NSManagedObject {
     }
     
     @NSManaged public var uuid: UUID?
+    @NSManaged public var pushToken: String?
+    @NSManaged public var lastTokenTrackDate: Date?
     @NSManaged public var customIds: NSSet?
     @NSManaged public var trackCustomer: NSSet?
     @NSManaged public var trackEvent: NSSet?
     
     var ids: [String: JSONValue] {
-        var data: [String: JSONValue] = ["cookie": .string(uuid!.uuidString)]
-        
-        // Convert all properties to key value items.
-        if let properties = customIds as? Set<KeyValueItem> {
-            properties.forEach({
-                DatabaseManager.processProperty(key: $0.key,
-                                                value: $0.value,
-                                                into: &data)
-            })
+        let ids: [String: JSONValue]? = managedObjectContext?.performAndWait {
+            var data: [String: JSONValue] = ["cookie": .string(uuid!.uuidString)]
+            
+            // Convert all properties to key value items.
+            if let properties = customIds as? Set<KeyValueItem> {
+                properties.forEach({
+                    guard let key = $0.key, let object = $0.value else {
+                        Exponea.logger.log(.warning, message: """
+                            Skipping KeyValueItem with empty key (\($0.key ?? "N/A"))) \
+                            or value (\(String(describing: $0.value))).
+                            """)
+                        return
+                    }
+                    
+                    data[key] = DatabaseManager.processObject(object)
+                })
+            }
+            return data
         }
-        
-        return data
+        return ids ?? [:]
     }
-
 }
 
-// MARK: Generated accessors for customIds
+// MARK: - CustomStringConvertible -
+
+extension Customer {
+    public override var description: String {
+        var text = "[Customer]\n"
+        
+        // Add cookie, push token and last track date
+        text += "UUID (cookie): \(uuid != nil ? uuid!.uuidString : "N/A")\n"
+        text += "Push Token: \(pushToken ?? "N/A")"
+        text += "Last Push Token Track Date: \(lastTokenTrackDate ?? Date.distantPast)"
+        
+        if let ids = customIds as? Set<KeyValueItem>, ids.count > 0 {
+            text += "Custom IDs: "
+            for id in ids {
+                text += "\"\(id.key!)\" = \(id.value!), "
+            }
+        }
+
+        text += "\n"
+        
+        return text
+    }
+}
+
+// MARK: - Core Data -
+
 extension Customer {
     
     @objc(addCustomIdsObject:)
@@ -54,7 +89,6 @@ extension Customer {
     
 }
 
-// MARK: Generated accessors for trackCustomer
 extension Customer {
     
     @objc(addTrackCustomerObject:)
@@ -71,7 +105,6 @@ extension Customer {
     
 }
 
-// MARK: Generated accessors for trackEvent
 extension Customer {
     
     @objc(addTrackEventObject:)

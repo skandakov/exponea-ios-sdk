@@ -14,6 +14,13 @@ protocol TrackingManagerType: class {
     /// The identifiers of the the current customer.
     var customerIds: [String: JSONValue] { get }
     
+    /// Returns the push token of the current customer if there is any.
+    var customerPushToken: String? { get }
+    
+    /// The manager responsible for handling notification callbacks.
+    /// Only useful if automatic push tracking is enabled.
+    var notificationsManager: PushNotificationManagerType? { get }
+    
     /// Main function used to track events to Exponea.
     ///
     /// - Parameters:
@@ -22,6 +29,14 @@ protocol TrackingManagerType: class {
     /// - Throws: An error of type `TrackingManagerError`.
     func track(_ type: EventType, with data: [DataType]?) throws
 
+    // MARK: - Session -
+    
+    /// Starts a session and tracks the event.
+    func triggerSessionStart() throws
+    
+    /// Ends a session and tracks the event.
+    func triggerSessionEnd() throws
+    
     // MARK: - Flushing -
 
     /// Flushing mode specifies how often and if should data be automatically flushed to Exponea.
@@ -30,4 +45,10 @@ protocol TrackingManagerType: class {
     
     /// This method can be used to manually flush all available data to Exponea.
     func flushData()
+    
+    /// This method can be used to manually flush all avialable data to Exponea with completion closure.
+    func flushData(completion: (() -> Void)?)
+    
+    /// Anonymizes the user by deleting all identifiers (including cookie) and deletes all database data.
+    func anonymize() throws
 }

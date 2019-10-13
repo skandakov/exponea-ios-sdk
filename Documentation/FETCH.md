@@ -3,11 +3,13 @@
 Exponea SDK has some methods to retrieve your data from the Exponea APP.
 All the responses will be available in a completion handler closure.
 
-#### Get customer recommendation
+### Customer Recommendation
+
+> **NOTE:** Requires Token authorization
 
 Get items recommended for a customer.
 
-```
+```swift
 public func fetchRecommendation(with request: RecommendationRequest,
                                 completion: @escaping (Result<RecommendationResponse>) -> Void)
 )
@@ -15,7 +17,7 @@ public func fetchRecommendation(with request: RecommendationRequest,
 
 #### 💻 Usage
 
-```
+```swift
 // Preparing the data.
 let recommendation = CustomerRecommendation(
         type = "recommendation",
@@ -36,55 +38,28 @@ Exponea.shared.fetchRecommendation(with: recommendation) { (result) in
 }
 ```
 
-#### Get customer attributes
+### Consents
 
-It's possible to get all the customer attributes you have sent to the Exponea APP through the following method.
+> **NOTE:** Requires Token authorization
 
+Fetch the list of your existing consent categories.
 
-```
-public func fetchAttributes(with request: AttributesDescription,
-                            completion: @escaping (Result<AttributesListDescription>) -> Void)
-```
-
-#### 💻 Usage
-
-```
-// Preparing the data.
-let attributes = AttributesDescription(
-        key = "type",
-        value = "property"
-        identificationKey = "property"
-        identificationValue = "first_name"
-)
-
-// Call fetchAttributes to get the customer attributes.
-Exponea.shared.fetchAttributes(with: attributes) { (result) in
-	// SDK will return a AttributesListDescription object.
-}
-```
-
-#### Get customer events
-
-Export all the events for a specific customer.
-
-```
-public func fetchEvents(with request: EventsRequest, 
-                        completion: @escaping (Result<EventsResponse>) -> Void)
+```swift
+public func fetchConsents(completion: @escaping (Result<ConsentsResponse>) -> Void)
 ```
 
 #### 💻 Usage
 
-```
-// Preparing the data.
-let events = EventsRequest(
-        eventTypes = ["session_start", "payment"],
-        sortOrder = "asc",
-        limit = 1,
-        skip = 0
-)
-
-// Call fetchEvents to get the customer attributes.
-Exponea.shared.fetchEvents(with: events) { (result) in
-  	// SDK will return a EventsResponse object.
+```swift
+// Fetch consents to get existing consent categories.
+Exponea.shared.fetchConsents { (result) in
+    switch result {
+    case .success(let response):
+        print(response.data)
+        
+    case .failure(let error):
+        print(error.localizedDescription)
+    }
 }
 ```
+

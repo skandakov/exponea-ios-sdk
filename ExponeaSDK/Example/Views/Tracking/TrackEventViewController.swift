@@ -40,8 +40,14 @@ class TrackEventViewController: UIViewController {
     }
     
     @IBAction func trackPressed(_ sender: Any) {
-        let eventType = eventTypeField.text ?? "custom_event"
-        var properties: [String: String] = [:]
+        let eventType: String = {
+            if let text = eventTypeField.text, !text.isEmpty {
+                return text
+            }
+            return "custom_event"
+        }()
+        
+        var properties: [String: JSONConvertible] = [:]
         
         if let key1 = keyField1.text, !key1.isEmpty {
             properties[key1] = valueField1.text ?? ""
@@ -54,6 +60,9 @@ class TrackEventViewController: UIViewController {
         if let key3 = keyField3.text, !key3.isEmpty {
             properties[key3] = valueField3.text ?? ""
         }
+        
+        let dict: [String: JSONValue] = ["my value" : JSONValue.dictionary(["array" : .array([.int(123)])])]
+        properties["testdictionary"] = dict as JSONConvertible
         
         Exponea.shared.trackEvent(properties: properties, timestamp: nil, eventType: eventType)
         dismiss(animated: true, completion: nil)

@@ -10,30 +10,29 @@ import Foundation
 
 /// Path route with projectId
 public struct RequestFactory {
-    public var baseURL: String
+    public var baseUrl: String
     public var projectToken: String
     public var route: Routes
-
-    public init(baseURL: String, projectToken: String, route: Routes) {
-        self.baseURL = baseURL
+    
+    public init(baseUrl: String, projectToken: String, route: Routes) {
+        self.baseUrl = baseUrl
         self.projectToken = projectToken
         self.route = route
     }
-
+    
     public var path: String {
         switch self.route {
-        case .identifyCustomer: return baseURL + "/track/v2/projects/\(projectToken)/customers"
-        case .customEvent: return baseURL + "/track/v2/projects/\(projectToken)/customers/events"
-        case .customerRecommendation: return baseURL + "/data/v2/projects/\(projectToken)/customers/attributes"
-        case .customerAttributes: return baseURL + "/data/v2/\(projectToken)/customers/attributes"
-        case .customerEvents: return baseURL + "/data/v2/projects/\(projectToken)/customers/events"
-        case .banners: return baseURL + "/data/v2/projects/\(projectToken)/configuration/banners"
+        case .identifyCustomer: return baseUrl + "/track/v2/projects/\(projectToken)/customers"
+        case .customEvent: return baseUrl + "/track/v2/projects/\(projectToken)/customers/events"
+        case .customerRecommendation: return baseUrl + "/data/v2/projects/\(projectToken)/customers/attributes"
+        case .customerAttributes: return baseUrl + "/data/v2/\(projectToken)/customers/attributes"
+        case .customerEvents: return baseUrl + "/data/v2/projects/\(projectToken)/customers/events"
+        case .banners: return baseUrl + "/data/v2/projects/\(projectToken)/configuration/banners"
+        case .consents: return baseUrl + "/data/v2/projects/\(projectToken)/consent/categories"
         case .personalization:
-            return baseURL + "/data/v2/projects/\(projectToken)/customers/personalisation/show-banners"
+            return baseUrl + "/data/v2/projects/\(projectToken)/customers/personalisation/show-banners"
         }
     }
-
-    public var method: HTTPMethod { return .post }
 }
 
 extension RequestFactory {
@@ -41,25 +40,22 @@ extension RequestFactory {
                         parameters: RequestParametersType? = nil,
                         customerIds: [String: JSONValue]? = nil) -> URLRequest {
         var request = URLRequest(url: URL(string: path)!)
-
+        
         // Create the basic request
-        request.httpMethod = method.rawValue
+        request.httpMethod = route.method.rawValue
         request.addValue(Constants.Repository.contentType,
                          forHTTPHeaderField: Constants.Repository.headerContentType)
         request.addValue(Constants.Repository.contentType,
                          forHTTPHeaderField: Constants.Repository.headerAccept)
-
+        
         // Add authorization if it was provided
         switch authorization {
         case .none: break
         case .token(let token):
             request.addValue("Token \(token)",
-                             forHTTPHeaderField: Constants.Repository.headerAuthorization)
-        case .basic(let secret):
-            request.addValue("Basic \(secret)",
-                             forHTTPHeaderField: Constants.Repository.headerAuthorization)
+                forHTTPHeaderField: Constants.Repository.headerAuthorization)
         }
-
+        
         // Add parameters as request body in JSON format, if we have any
         if let parameters = parameters?.requestParameters {
             var params = parameters
@@ -77,65 +73,42 @@ extension RequestFactory {
                 Exponea.logger.log(.verbose, message: "Request parameters: \(params)")
             }
         }
-
+        
+        // Log request if necessary
+        if Exponea.logger.logLevel == .verbose {
+            Exponea.logger.log(.verbose, message: "Created request: \n\(request.description)")
+        }
+        
         return request
     }
     
     typealias CompletionHandler = ((Data?, URLResponse?, Error?) -> Void)
     
-    func handler(with completion: @escaping ((EmptyResult) -> Void)) -> CompletionHandler {
-        return { (_, _, error) in
-            if let error = error {
-                DispatchQueue.main.async {
-                    completion(.failure(error))
+    func handler<T: ErrorInitialisable>(with completion: @escaping ((EmptyResult<T>) -> Void)) -> CompletionHandler {
+        return { (data, response, error) in
+            self.process(response, data: data, error: error, resultAction: { (result) in
+                switch result {
+                case .success(_):
+                    DispatchQueue.main.async {
+                        completion(.success)
+                    }
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        let error = T.create(from: error)
+                        completion(.failure(error))
+                    }
                 }
-            } else {
-                DispatchQueue.main.async {
-                    completion(.success)
-                }
-            }
+            })
         }
     }
     
     func handler<T: Decodable>(with completion: @escaping ((Result<T>) -> Void)) -> CompletionHandler {
         return { (data, response, error) in
-            guard let httpResponse = response as? HTTPURLResponse else {
-                DispatchQueue.main.async {
-                    completion(.failure(RepositoryError.invalidResponse(response)))
-                }
-                return
-            }
-
-            if let error = error {
-                completion(.failure(error))
-            } else if let data = data {
-                let decoder = JSONDecoder()
-                
-                // Switch on status code
-                switch httpResponse.statusCode {
-                case 400, 405..<500:
-                    //let errorResponse = try? decoder.decode(ErrorResponse.self, from: data)
-                    DispatchQueue.main.async {
-                        let text = String(data: data, encoding: .utf8)
-                        completion(.failure(RepositoryError.missingData(text ?? response?.description ?? "N/A")))
-                    }
-                case 404:
-                    let errorResponse = try? decoder.decode(ErrorResponse.self, from: data)
-                    DispatchQueue.main.async {
-                        completion(.failure(RepositoryError.urlNotFound(errorResponse)))
-                    }
-                    
-                case 500...Int.max:
-                    let errorResponse = try? decoder.decode(ErrorResponse.self, from: data)
-                    DispatchQueue.main.async {
-                        completion(.failure(RepositoryError.serverError(errorResponse)))
-                    }
-                    
-                default:
-                    
-                    // If all is good continue serialising
+            self.process(response, data: data, error: error, resultAction: { (result) in
+                switch result {
+                case .success(let data):
                     do {
-                        let object = try decoder.decode(T.self, from: data)
+                        let object = try JSONDecoder().decode(T.self, from: data)
                         DispatchQueue.main.async {
                             completion(.success(object))
                         }
@@ -144,10 +117,76 @@ extension RequestFactory {
                             completion(.failure(error))
                         }
                     }
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        completion(.failure(error))
+                    }
                 }
-            } else {
-                completion(.failure(RepositoryError.invalidResponse(response)))
+            })
+        }
+    }
+    
+    func process(_ response: URLResponse?, data: Data?, error: Error?,
+                 resultAction: @escaping ((Result<Data>) -> Void)) {
+        // Check if we have any response at all
+        guard let response = response else {
+            DispatchQueue.main.async {
+                resultAction(.failure(RepositoryError.connectionError))
             }
+            return
+        }
+        
+        // Log response if needed
+        if Exponea.logger.logLevel == .verbose {
+            Exponea.logger.log(.verbose, message: """
+                Response received:
+                \(response.description(with: data, error: error))
+                """)
+        }
+        
+        // Make sure we got the correct response type
+        guard let httpResponse = response as? HTTPURLResponse else {
+            DispatchQueue.main.async {
+                resultAction(.failure(RepositoryError.invalidResponse(response)))
+            }
+            return
+        }
+        
+        if let error = error {
+            //handle server errors
+            switch httpResponse.statusCode {
+            case 500..<600:
+                resultAction(.failure(RepositoryError.serverError(nil)))
+            default:
+                resultAction(.failure(error))
+            }
+        } else if let data = data {
+            let decoder = JSONDecoder()
+            
+            // Switch on status code
+            switch httpResponse.statusCode {
+            case 400, 405..<500:
+                let text = String(data: data, encoding: .utf8)
+                resultAction(.failure(RepositoryError.missingData(text ?? httpResponse.description)))
+                
+            case 401:
+                let response = try? decoder.decode(ErrorResponse.self, from: data)
+                resultAction(.failure(RepositoryError.notAuthorized(response)))
+                
+            case 404:
+                let errorResponse = try? decoder.decode(MultipleErrorResponse.self, from: data)
+                resultAction(.failure(RepositoryError.urlNotFound(errorResponse)))
+                
+            case 500...Int.max:
+                let errorResponse = try? decoder.decode(MultipleErrorResponse.self, from: data)
+                resultAction(.failure(RepositoryError.serverError(errorResponse)))
+                
+            default:
+                // We assume all other status code are a success
+                resultAction(.success(data))
+            }
+        } else {
+            resultAction(.failure(RepositoryError.invalidResponse(response)))
         }
     }
 }

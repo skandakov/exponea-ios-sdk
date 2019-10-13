@@ -11,9 +11,12 @@ target 'ExponeaSDKTests' do
   # target 'ExponeaSDKTests' do
     inherit! :search_paths
 
+    inhibit_all_warnings!
+
     # Pods for testing
     pod 'Quick'
     pod 'Nimble'
-    pod 'SwiftLint', "~>0.25.0"
+    pod 'SwiftLint'
+    pod 'Mockingjay'
   # end
 end

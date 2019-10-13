@@ -40,6 +40,25 @@ extension Double: JSONConvertible {
     }
 }
 
+/// --------
+
+/// When Swift 4.2 is released, use the following and remove workarounds.
+
+//extension Dictionary: JSONConvertible where Key == String, Value == JSONConvertible {
+//    public var jsonValue: JSONValue {
+//        return .dictionary(self.mapValues({ $0.jsonValue }))
+//    }
+//}
+
+
+//extension Array: JSONConvertible where Element == JSONConvertible {
+//    public var jsonValue: JSONValue {
+//        return .array(self.map({ $0.jsonValue }))
+//    }
+//}
+
+/// --------
+
 extension Dictionary: JSONConvertible where Key == String, Value == JSONValue {
     public var jsonValue: JSONValue {
         return .dictionary(self)
@@ -59,6 +78,42 @@ public indirect enum JSONValue {
     case double(Double)
     case dictionary([String: JSONValue])
     case array([JSONValue])
+    
+    static func convert(_ dictionary: [String: Any]) -> [String: JSONValue] {
+        var result: [String: JSONValue] = [:]
+        for (key, value) in dictionary {
+            switch value {
+            case is Bool: result[key] = .bool(value as! Bool)
+            case is Int: result[key] = .int(value as! Int)
+            case is Double: result[key] = .double(value as! Double)
+            case is String: result[key] = .string(value as! String)
+            case is Array<Any>: result[key] = .array(convert(value as! [Any]))
+            case is Dictionary<String, Any>: result[key] = .dictionary(convert(value as! [String: Any]))
+            default:
+                Exponea.logger.log(.warning, message: "Can't convert value to JSONValue: \(value).")
+                continue
+            }
+        }
+        return result
+    }
+    
+    static func convert(_ array: [Any]) -> [JSONValue] {
+        var result: [JSONValue] = []
+        for value in array {
+            switch value {
+            case is Bool: result.append(.bool(value as! Bool))
+            case is Int: result.append(.int(value as! Int))
+            case is Double: result.append(.double(value as! Double))
+            case is String: result.append(.string(value as! String))
+            case is Array<Any>: result.append(.array(convert(value as! [Any])))
+            case is Dictionary<String, Any>: result.append(.dictionary(convert(value as! [String: Any])))
+            default:
+                Exponea.logger.log(.warning, message: "Can't convert value to JSONValue: \(value).")
+                continue
+            }
+        }
+        return result
+    }
 }
 
 extension JSONValue {
@@ -87,19 +142,24 @@ extension JSONValue {
 
 extension JSONValue: Codable, Equatable {
     public init(from decoder: Decoder) throws {
-        // Can be made prettier, but as a simple example:
         let container = try decoder.singleValueContainer()
         
-        do { self = .string(try container.decode(String.self))
+        do {
+            self = .dictionary(try container.decode([String: JSONValue].self))
         } catch DecodingError.typeMismatch {
-            do { self = .int(try container.decode(Int.self))
+            do {
+                self = .array(try container.decode([JSONValue].self))
             } catch DecodingError.typeMismatch {
-                do { self = .dictionary(try container.decode([String: JSONValue].self))
+                do {
+                    self = .string(try container.decode(String.self))
                 } catch DecodingError.typeMismatch {
-                    do { self = .array(try container.decode([JSONValue].self))
+                    do {
+                        self = .int(try container.decode(Int.self))
                     } catch {
-                        do { self = .bool(try container.decode(Bool.self))
-                        } catch { self = .double(try container.decode(Double.self))
+                        do {
+                            self = .double(try container.decode(Double.self))
+                        } catch {
+                            self = .bool(try container.decode(Bool.self))
                         }
                     }
                 }
@@ -138,9 +198,9 @@ extension JSONValue {
         case .bool(let bool): return NSNumber(value: bool)
         case .int(let int): return NSNumber(value: int)
         case .string(let string): return NSString(string: string)
-        case .array(let array): return array as NSArray
+        case .array(let array): return array.map({ $0.objectValue }) as NSArray
         case .double(let double): return NSNumber(value: double)
-        case .dictionary(let dictionary): return dictionary as NSDictionary
+        case .dictionary(let dictionary): return dictionary.mapValues({ $0.objectValue }) as NSDictionary
         }
     }
 }
